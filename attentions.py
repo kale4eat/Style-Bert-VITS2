@@ -8,7 +8,7 @@ from common.log import logger as logging
 
 
 class LayerNorm(nn.Module):
-    def __init__(self, channels, eps=1e-5):
+    def __init__(self, channels: int, eps=1e-5):
         super().__init__()
         self.channels = channels
         self.eps = eps
@@ -35,14 +35,14 @@ def fused_add_tanh_sigmoid_multiply(input_a, input_b, n_channels):
 class Encoder(nn.Module):
     def __init__(
         self,
-        hidden_channels,
-        filter_channels,
-        n_heads,
-        n_layers,
-        kernel_size=1,
-        p_dropout=0.0,
-        window_size=4,
-        isflow=True,
+        hidden_channels: int,
+        filter_channels: int,
+        n_heads: int,
+        n_layers: int,
+        kernel_size: int = 1,
+        p_dropout: float = 0.0,
+        window_size: int = 4,
+        isflow: bool = True,
         **kwargs
     ):
         super().__init__()
@@ -121,14 +121,14 @@ class Encoder(nn.Module):
 class Decoder(nn.Module):
     def __init__(
         self,
-        hidden_channels,
-        filter_channels,
-        n_heads,
-        n_layers,
-        kernel_size=1,
-        p_dropout=0.0,
-        proximal_bias=False,
-        proximal_init=True,
+        hidden_channels: int,
+        filter_channels: int,
+        n_heads: int,
+        n_layers: int,
+        kernel_size: int = 1,
+        p_dropout: float = 0.0,
+        proximal_bias: bool = False,
+        proximal_init: bool = True,
         **kwargs
     ):
         super().__init__()
@@ -207,15 +207,15 @@ class Decoder(nn.Module):
 class MultiHeadAttention(nn.Module):
     def __init__(
         self,
-        channels,
-        out_channels,
-        n_heads,
-        p_dropout=0.0,
+        channels: int,
+        out_channels: int,
+        n_heads: int,
+        p_dropout: float = 0.0,
         window_size=None,
-        heads_share=True,
+        heads_share: bool = True,
         block_length=None,
-        proximal_bias=False,
-        proximal_init=False,
+        proximal_bias: bool = False,
+        proximal_init: bool = False,
     ):
         super().__init__()
         assert channels % n_heads == 0
@@ -407,13 +407,13 @@ class MultiHeadAttention(nn.Module):
 class FFN(nn.Module):
     def __init__(
         self,
-        in_channels,
-        out_channels,
-        filter_channels,
-        kernel_size,
-        p_dropout=0.0,
+        in_channels: int,
+        out_channels: int,
+        filter_channels: int,
+        kernel_size: int,
+        p_dropout: float = 0.0,
         activation=None,
-        causal=False,
+        causal: bool = False,
     ):
         super().__init__()
         self.in_channels = in_channels

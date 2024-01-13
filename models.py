@@ -1,5 +1,6 @@
 import math
 import warnings
+from collections.abc import Sequence
 
 import torch
 from torch import nn
@@ -17,7 +18,12 @@ from text import num_languages, num_tones, symbols
 
 class DurationDiscriminator(nn.Module):  # vits2
     def __init__(
-        self, in_channels, filter_channels, kernel_size, p_dropout, gin_channels=0
+        self,
+        in_channels: int,
+        filter_channels: int,
+        kernel_size: int,
+        p_dropout: float,
+        gin_channels: int = 0,
     ):
         super().__init__()
 
@@ -93,16 +99,16 @@ class DurationDiscriminator(nn.Module):  # vits2
 class TransformerCouplingBlock(nn.Module):
     def __init__(
         self,
-        channels,
-        hidden_channels,
-        filter_channels,
-        n_heads,
-        n_layers,
-        kernel_size,
-        p_dropout,
-        n_flows=4,
-        gin_channels=0,
-        share_parameter=False,
+        channels: int,
+        hidden_channels: int,
+        filter_channels: int,
+        n_heads: int,
+        n_layers: int,
+        kernel_size: int,
+        p_dropout: float,
+        n_flows: int = 4,
+        gin_channels: int = 0,
+        share_parameter: bool = False,
     ):
         super().__init__()
         self.channels = channels
@@ -159,12 +165,12 @@ class TransformerCouplingBlock(nn.Module):
 class StochasticDurationPredictor(nn.Module):
     def __init__(
         self,
-        in_channels,
-        filter_channels,
-        kernel_size,
-        p_dropout,
-        n_flows=4,
-        gin_channels=0,
+        in_channels: int,
+        filter_channels: int,
+        kernel_size: int,
+        p_dropout: float,
+        n_flows: int = 4,
+        gin_channels: int = 0,
     ):
         super().__init__()
         filter_channels = in_channels  # it needs to be removed from future version.
@@ -269,7 +275,12 @@ class StochasticDurationPredictor(nn.Module):
 
 class DurationPredictor(nn.Module):
     def __init__(
-        self, in_channels, filter_channels, kernel_size, p_dropout, gin_channels=0
+        self,
+        in_channels: int,
+        filter_channels: int,
+        kernel_size: int,
+        p_dropout: float,
+        gin_channels: int = 0,
     ):
         super().__init__()
 
@@ -313,16 +324,16 @@ class DurationPredictor(nn.Module):
 class TextEncoder(nn.Module):
     def __init__(
         self,
-        n_vocab,
-        out_channels,
-        hidden_channels,
-        filter_channels,
-        n_heads,
-        n_layers,
-        kernel_size,
-        p_dropout,
-        n_speakers,
-        gin_channels=0,
+        n_vocab: int,
+        out_channels: int,
+        hidden_channels: int,
+        filter_channels: int,
+        n_heads: int,
+        n_layers: int,
+        kernel_size: int,
+        p_dropout: float,
+        n_speakers: int,
+        gin_channels: int = 0,
     ):
         super().__init__()
         self.n_vocab = n_vocab
@@ -400,13 +411,13 @@ class TextEncoder(nn.Module):
 class ResidualCouplingBlock(nn.Module):
     def __init__(
         self,
-        channels,
-        hidden_channels,
-        kernel_size,
-        dilation_rate,
-        n_layers,
-        n_flows=4,
-        gin_channels=0,
+        channels: int,
+        hidden_channels: int,
+        kernel_size: int,
+        dilation_rate: int,
+        n_layers: int,
+        n_flows: int = 4,
+        gin_channels: int = 0,
     ):
         super().__init__()
         self.channels = channels
@@ -445,13 +456,13 @@ class ResidualCouplingBlock(nn.Module):
 class PosteriorEncoder(nn.Module):
     def __init__(
         self,
-        in_channels,
-        out_channels,
-        hidden_channels,
-        kernel_size,
-        dilation_rate,
-        n_layers,
-        gin_channels=0,
+        in_channels: int,
+        out_channels: int,
+        hidden_channels: int,
+        kernel_size: int,
+        dilation_rate: int,
+        n_layers: int,
+        gin_channels: int = 0,
     ):
         super().__init__()
         self.in_channels = in_channels
@@ -487,14 +498,14 @@ class PosteriorEncoder(nn.Module):
 class Generator(torch.nn.Module):
     def __init__(
         self,
-        initial_channel,
-        resblock,
-        resblock_kernel_sizes,
-        resblock_dilation_sizes,
-        upsample_rates,
-        upsample_initial_channel,
-        upsample_kernel_sizes,
-        gin_channels=0,
+        initial_channel: int,
+        resblock: str,
+        resblock_kernel_sizes: Sequence[int],
+        resblock_dilation_sizes: Sequence[Sequence[int]],
+        upsample_rates: Sequence[int],
+        upsample_initial_channel: int,
+        upsample_kernel_sizes: Sequence[int],
+        gin_channels: int = 0,
     ):
         super(Generator, self).__init__()
         self.num_kernels = len(resblock_kernel_sizes)
@@ -562,7 +573,13 @@ class Generator(torch.nn.Module):
 
 
 class DiscriminatorP(torch.nn.Module):
-    def __init__(self, period, kernel_size=5, stride=3, use_spectral_norm=False):
+    def __init__(
+        self,
+        period: int,
+        kernel_size: int = 5,
+        stride: int = 3,
+        use_spectral_norm: bool = False,
+    ):
         super(DiscriminatorP, self).__init__()
         self.period = period
         self.use_spectral_norm = use_spectral_norm
@@ -641,7 +658,7 @@ class DiscriminatorP(torch.nn.Module):
 
 
 class DiscriminatorS(torch.nn.Module):
-    def __init__(self, use_spectral_norm=False):
+    def __init__(self, use_spectral_norm: bool = False):
         super(DiscriminatorS, self).__init__()
         norm_f = weight_norm if use_spectral_norm is False else spectral_norm
         self.convs = nn.ModuleList(
@@ -671,7 +688,7 @@ class DiscriminatorS(torch.nn.Module):
 
 
 class MultiPeriodDiscriminator(torch.nn.Module):
-    def __init__(self, use_spectral_norm=False):
+    def __init__(self, use_spectral_norm: bool = False):
         super(MultiPeriodDiscriminator, self).__init__()
         periods = [2, 3, 5, 7, 11]
 
@@ -703,7 +720,7 @@ class ReferenceEncoder(nn.Module):
     outputs --- [N, ref_enc_gru_size]
     """
 
-    def __init__(self, spec_channels, gin_channels=0):
+    def __init__(self, spec_channels: int, gin_channels: int = 0):
         super().__init__()
         self.spec_channels = spec_channels
         ref_enc_filters = [32, 32, 64, 64, 128, 128]
@@ -763,29 +780,29 @@ class SynthesizerTrn(nn.Module):
 
     def __init__(
         self,
-        n_vocab,
-        spec_channels,
-        segment_size,
-        inter_channels,
-        hidden_channels,
-        filter_channels,
-        n_heads,
-        n_layers,
-        kernel_size,
-        p_dropout,
-        resblock,
-        resblock_kernel_sizes,
-        resblock_dilation_sizes,
-        upsample_rates,
-        upsample_initial_channel,
-        upsample_kernel_sizes,
-        n_speakers=256,
-        gin_channels=256,
-        use_sdp=True,
-        n_flow_layer=4,
-        n_layers_trans_flow=4,
-        flow_share_parameter=False,
-        use_transformer_flow=True,
+        n_vocab: int,
+        spec_channels: int,
+        segment_size: int,
+        inter_channels: int,
+        hidden_channels: int,
+        filter_channels: int,
+        n_heads: int,
+        n_layers: int,
+        kernel_size: int,
+        p_dropout: float,
+        resblock: str,
+        resblock_kernel_sizes: Sequence[int],
+        resblock_dilation_sizes: Sequence[Sequence[int]],
+        upsample_rates: Sequence[int],
+        upsample_initial_channel: int,
+        upsample_kernel_sizes: Sequence[int],
+        n_speakers: int = 256,
+        gin_channels: int = 256,
+        use_sdp: bool = True,
+        n_flow_layer: int = 4,
+        n_layers_trans_flow: int = 4,
+        flow_share_parameter: bool = False,
+        use_transformer_flow: bool = True,
         **kwargs,
     ):
         super().__init__()
