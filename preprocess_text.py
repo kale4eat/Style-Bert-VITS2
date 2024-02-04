@@ -33,6 +33,7 @@ preprocess_text_config = config.preprocess_text_config
 @click.option("--max-val-total", default=preprocess_text_config.max_val_total)
 @click.option("--clean/--no-clean", default=preprocess_text_config.clean)
 @click.option("-y", "--yml_config")
+@click.option("--use_jp_extra", is_flag=True)
 def preprocess(
     transcription_path: str,
     cleaned_path: Optional[str],
@@ -43,6 +44,7 @@ def preprocess(
     max_val_total: int,
     clean: bool,
     yml_config: str,  # 这个不要删
+    use_jp_extra: bool,
 ):
     if cleaned_path == "" or cleaned_path is None:
         cleaned_path = transcription_path + ".cleaned"
@@ -50,31 +52,28 @@ def preprocess(
     if clean:
         with open(cleaned_path, "w", encoding="utf-8") as out_file:
             with open(transcription_path, "r", encoding="utf-8") as trans_file:
-                lines = trans_file.readlines()
-                # print(lines, ' ', len(lines))
-                if len(lines) != 0:
-                    for line in tqdm(lines, file=SAFE_STDOUT):
-                        try:
-                            utt, spk, language, text = line.strip().split("|")
-                            norm_text, phones, tones, word2ph = clean_text(
-                                text, language
+                for line in tqdm(trans_file, file=SAFE_STDOUT):
+                    try:
+                        utt, spk, language, text = line.strip().split("|")
+                        norm_text, phones, tones, word2ph = clean_text(
+                            text, language, use_jp_extra
+                        )
+                        out_file.write(
+                            "{}|{}|{}|{}|{}|{}|{}\n".format(
+                                utt,
+                                spk,
+                                language,
+                                norm_text,
+                                " ".join(phones),
+                                " ".join([str(i) for i in tones]),
+                                " ".join([str(i) for i in word2ph]),
                             )
-                            out_file.write(
-                                "{}|{}|{}|{}|{}|{}|{}\n".format(
-                                    utt,
-                                    spk,
-                                    language,
-                                    norm_text,
-                                    " ".join(phones),
-                                    " ".join([str(i) for i in tones]),
-                                    " ".join([str(i) for i in word2ph]),
-                                )
-                            )
-                        except Exception as e:
-                            logger.error(
-                                f"An error occurred while generating the training set and validation set, at line:\n{line}\nDetails:\n{e}"
-                            )
-                            raise
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"An error occurred while generating the training set and validation set, at line:\n{line}\nDetails:\n{e}"
+                        )
+                        raise
 
     transcription_path = cleaned_path
     spk_utt_map = defaultdict(list)

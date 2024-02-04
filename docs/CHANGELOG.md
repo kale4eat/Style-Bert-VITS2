@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.0 (2024-02-03)
+
+### 大きい変更
+モデル構造に [Bert-VITS2の日本語特化モデル JP-Extra](https://github.com/fishaudio/Bert-VITS2/releases/tag/JP-Exta) を取り込んだものを使えるように変更、[事前学習モデル](https://huggingface.co/litagin/Style-Bert-VITS2-2.0-base-JP-Extra)も[Bert-VITS2 JP-Extra](https://huggingface.co/Stardust-minus/Bert-VITS2-Japanese-Extra)のものを改造してStyle-Bert-VITS2で使えるようにしました (モデル構造を見直して日本語での学習をしていただいた [@Stardust-minus](https://github.com/Stardust-minus) 様に感謝します)
+- これにより、日本語の発音やアクセントや抑揚や自然性が向上する傾向があります
+- スタイルベクトルを使ったスタイルの操作は変わらず使えます
+- ただしJP-Extraでは英語と中国語の音声合成は（現状は）できません
+- 旧モデルも引き続き使うことができ、また旧モデルで学習することもできます
+- デフォルトのJVNVモデルは現在は旧verのままです
+
+### 改善
+- `Merge.bat`で、声音マージを、より細かく「声質」と「声の高さ」の点でマージできるように。
+
+### バグ修正
+- PyTorchのバージョンに由来するバグを修正（torchのバージョンを2.1.2に固定）
+- `―`（ダッシュ、長音記号ではない）が2連続すると学習・音声合成でエラーになるバグを修正
+- 「三円」等「ん＋母音」のアクセントの仮名表記が「サネン」等になり、また偶にエラーが発生する問題を修正（「ん」の音素表記を内部的には「N」で統一）
+
 ## v1.3 (2024-01-09)
 
 ### 大きい変更
