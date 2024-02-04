@@ -120,20 +120,8 @@ class TransformerCouplingBlock(nn.Module):
 
         self.flows = nn.ModuleList()
 
-        self.wn = (
-            attentions.FFT(
-                hidden_channels,
-                filter_channels,
-                n_heads,
-                n_layers,
-                kernel_size,
-                p_dropout,
-                isflow=True,
-                gin_channels=self.gin_channels,
-            )
-            if share_parameter
-            else None
-        )
+        # share_parameter must be false whit attentions.FFT not included repo
+        # so this layer is not used
 
         for i in range(n_flows):
             self.flows.append(
