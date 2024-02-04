@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 import math
 import torch
 from torch.nn import functional as F
@@ -13,10 +14,14 @@ def get_padding(kernel_size, dilation=1):
     return int((kernel_size * dilation - dilation) / 2)
 
 
-def convert_pad_shape(pad_shape):
+# for torch script
+def convert_pad_shape(pad_shape: list[list[int]]) -> list[int]:
     layer = pad_shape[::-1]
-    pad_shape = [item for sublist in layer for item in sublist]
-    return pad_shape
+    flat_list: list[int] = []
+    for sublist in layer:
+        for item in sublist:
+            flat_list.append(item)
+    return flat_list
 
 
 def intersperse(lst, item):
@@ -45,14 +50,14 @@ def rand_gumbel_like(x):
     return g
 
 
-def slice_segments(x, ids_str, segment_size=4):
+def slice_segments(x, ids_str, segment_size: int = 4):
     gather_indices = ids_str.view(x.size(0), 1, 1).repeat(
         1, x.size(1), 1
     ) + torch.arange(segment_size, device=x.device)
     return torch.gather(x, 2, gather_indices)
 
 
-def rand_slice_segments(x, x_lengths=None, segment_size=4):
+def rand_slice_segments(x, x_lengths=None, segment_size: int = 4):
     b, d, t = x.size()
     if x_lengths is None:
         x_lengths = t
@@ -110,9 +115,9 @@ def shift_1d(x):
     return x
 
 
-def sequence_mask(length, max_length=None):
-    if max_length is None:
-        max_length = length.max()
+def sequence_mask(length, max_length: int):
+    """
+    for torch script, max_length = length.max(), not None"""
     x = torch.arange(max_length, dtype=length.dtype, device=length.device)
     return x.unsqueeze(0) < length.unsqueeze(1)
 

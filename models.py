@@ -58,7 +58,7 @@ class DurationDiscriminator(nn.Module):  # vits2
 
         self.output_layer = nn.Sequential(nn.Linear(filter_channels, 1), nn.Sigmoid())
 
-    def forward_probability(self, x, x_mask, dur, g=None):
+    def forward_probability(self, x, x_mask, dur, g=torch.tensor(0)):
         dur = self.dur_proj(dur)
         x = torch.cat([x, dur], dim=1)
         x = self.pre_out_conv_1(x * x_mask)
@@ -74,9 +74,9 @@ class DurationDiscriminator(nn.Module):  # vits2
         output_prob = self.output_layer(x)
         return output_prob
 
-    def forward(self, x, x_mask, dur_r, dur_hat, g=None):
+    def forward(self, x, x_mask, dur_r, dur_hat, g=torch.tensor(0)):
         x = torch.detach(x)
-        if g is not None:
+        if torch.any(g):
             g = torch.detach(g)
             x = x + self.cond(g)
         x = self.conv_1(x * x_mask)
@@ -152,13 +152,16 @@ class TransformerCouplingBlock(nn.Module):
             )
             self.flows.append(modules.Flip())
 
-    def forward(self, x, x_mask, g=None, reverse=False):
+        # TODO: 重みの保存から除く必要あり
+        self.reversed_flows = nn.ModuleList(reversed(self.flows))
+
+    def forward(self, x, x_mask, g=torch.tensor(0), reverse: bool = False):
         if not reverse:
             for flow in self.flows:
                 x, _ = flow(x, x_mask, g=g, reverse=reverse)
         else:
-            for flow in reversed(self.flows):
-                x = flow(x, x_mask, g=g, reverse=reverse)
+            for flow in self.reversed_flows:
+                x, _ = flow(x, x_mask, g=g, reverse=reverse)
         return x
 
 
@@ -211,10 +214,25 @@ class StochasticDurationPredictor(nn.Module):
         if gin_channels != 0:
             self.cond = nn.Conv1d(gin_channels, filter_channels, 1)
 
-    def forward(self, x, x_mask, w=None, g=None, reverse=False, noise_scale=1.0):
+        # TODO: 重みの保存から除く必要あり
+        reversed_flows = list(reversed(self.flows))
+        # remove a useless vflow
+        self.reversed_sparse_flows = nn.ModuleList(
+            reversed_flows[:-2] + [reversed_flows[-1]]
+        )
+
+    def forward(
+        self,
+        x,
+        x_mask,
+        w: torch.Tensor = torch.tensor(0),
+        g: torch.Tensor = torch.tensor(0),
+        reverse: bool = False,
+        noise_scale: float = 1.0,
+    ):
         x = torch.detach(x)
         x = self.pre(x)
-        if g is not None:
+        if torch.any(g):
             g = torch.detach(g)
             x = x + self.cond(g)
         x = self.convs(x, x_mask)
@@ -222,7 +240,7 @@ class StochasticDurationPredictor(nn.Module):
 
         if not reverse:
             flows = self.flows
-            assert w is not None
+            assert torch.any(w)
 
             logdet_tot_q = 0
             h_w = self.post_pre(w)
@@ -260,14 +278,12 @@ class StochasticDurationPredictor(nn.Module):
             )
             return nll + logq  # [b]
         else:
-            flows = list(reversed(self.flows))
-            flows = flows[:-2] + [flows[-1]]  # remove a useless vflow
             z = (
                 torch.randn(x.size(0), 2, x.size(2)).to(device=x.device, dtype=x.dtype)
                 * noise_scale
             )
-            for flow in flows:
-                z = flow(z, x_mask, g=x, reverse=reverse)
+            for flow in self.reversed_sparse_flows:
+                z, _ = flow(z, x_mask, g=x, reverse=reverse)
             z0, z1 = torch.split(z, [1, 1], 1)
             logw = z0
             return logw
@@ -304,9 +320,9 @@ class DurationPredictor(nn.Module):
         if gin_channels != 0:
             self.cond = nn.Conv1d(gin_channels, in_channels, 1)
 
-    def forward(self, x, x_mask, g=None):
+    def forward(self, x, x_mask, g=torch.tensor(0)):
         x = torch.detach(x)
-        if g is not None:
+        if torch.any(g):
             g = torch.detach(g)
             x = x + self.cond(g)
         x = self.conv_1(x * x_mask)
@@ -378,7 +394,7 @@ class TextEncoder(nn.Module):
         en_bert,
         style_vec,
         sid,
-        g=None,
+        g=torch.tensor(0),
     ):
         bert_emb = self.bert_proj(bert).transpose(1, 2)
         ja_bert_emb = self.ja_bert_proj(ja_bert).transpose(1, 2)
@@ -443,13 +459,19 @@ class ResidualCouplingBlock(nn.Module):
             )
             self.flows.append(modules.Flip())
 
-    def forward(self, x, x_mask, g=None, reverse=False):
+    def forward(
+        self,
+        x,
+        x_mask,
+        g: torch.Tensor = torch.tensor(0),
+        reverse: bool = False,
+    ):
         if not reverse:
             for flow in self.flows:
                 x, _ = flow(x, x_mask, g=g, reverse=reverse)
         else:
             for flow in reversed(self.flows):
-                x = flow(x, x_mask, g=g, reverse=reverse)
+                x, _ = flow(x, x_mask, g=g, reverse=reverse)
         return x
 
 
@@ -483,7 +505,7 @@ class PosteriorEncoder(nn.Module):
         )
         self.proj = nn.Conv1d(hidden_channels, out_channels * 2, 1)
 
-    def forward(self, x, x_lengths, g=None):
+    def forward(self, x, x_lengths, g=torch.tensor(0)):
         x_mask = torch.unsqueeze(commons.sequence_mask(x_lengths, x.size(2)), 1).to(
             x.dtype
         )
@@ -513,7 +535,7 @@ class Generator(torch.nn.Module):
         self.conv_pre = Conv1d(
             initial_channel, upsample_initial_channel, 7, 1, padding=3
         )
-        resblock = modules.ResBlock1 if resblock == "1" else modules.ResBlock2
+        # resblock_ptr = modules.ResBlock1 if resblock == "1" else modules.ResBlock2
 
         self.ups = nn.ModuleList()
         for i, (u, k) in enumerate(zip(upsample_rates, upsample_kernel_sizes)):
@@ -535,7 +557,10 @@ class Generator(torch.nn.Module):
             for j, (k, d) in enumerate(
                 zip(resblock_kernel_sizes, resblock_dilation_sizes)
             ):
-                self.resblocks.append(resblock(ch, k, d))
+                if resblock == "1":
+                    self.resblocks.append(modules.ResBlock1(ch, k, d))
+                else:
+                    self.resblocks.append(modules.ResBlock2(ch, k, d))
 
         self.conv_post = Conv1d(ch, 1, 7, 1, padding=3, bias=False)
         self.ups.apply(init_weights)
@@ -543,21 +568,32 @@ class Generator(torch.nn.Module):
         if gin_channels != 0:
             self.cond = nn.Conv1d(gin_channels, upsample_initial_channel, 1)
 
-    def forward(self, x, g=None):
+        # TODO: 重みの保存から除く必要あり
+        self.ups_repeated = nn.ModuleList()
+        for i in range(len(self.ups)):
+            for _ in range(self.num_kernels):
+                self.ups_repeated.append(self.ups[i])
+
+    def forward(self, x, g=torch.tensor(0)):
         x = self.conv_pre(x)
-        if g is not None:
+        if torch.any(g):
             x = x + self.cond(g)
 
-        for i in range(self.num_upsamples):
-            x = F.leaky_relu(x, modules.LRELU_SLOPE)
-            x = self.ups[i](x)
-            xs = None
-            for j in range(self.num_kernels):
-                if xs is None:
-                    xs = self.resblocks[i * self.num_kernels + j](x)
-                else:
-                    xs += self.resblocks[i * self.num_kernels + j](x)
-            x = xs / self.num_kernels
+        xs = torch.zeros_like(x)
+        for i, (ups, resblock) in enumerate(zip(self.ups_repeated, self.resblocks)):
+            if i % self.num_kernels == 0:
+                # 新しいupsの処理を開始するたびにxを更新し、xsをリセット
+                x = F.leaky_relu(x, 0.1)
+                x = ups(x)
+                xs = resblock(x)  # 最初のresblock
+            else:
+                # 残りのresblocksの処理
+                xs += resblock(x)
+
+            if (i + 1) % self.num_kernels == 0:
+                # self.num_kernels回のresblockの処理が完了したら、xを更新
+                x = xs / self.num_kernels
+
         x = F.leaky_relu(x)
         x = self.conv_post(x)
         x = torch.tanh(x)
@@ -567,9 +603,15 @@ class Generator(torch.nn.Module):
     def remove_weight_norm(self):
         print("Removing weight norm...")
         for layer in self.ups:
-            remove_weight_norm(layer)
+            if hasattr(layer, "weight_g") or hasattr(layer, "weight_v"):
+                remove_weight_norm(layer)
         for layer in self.resblocks:
-            layer.remove_weight_norm()
+            if hasattr(layer, "weight_g") or hasattr(layer, "weight_v"):
+                layer.remove_weight_norm()
+
+    def __prepare_scriptable__(self):
+        self.remove_weight_norm()
+        return self
 
 
 class DiscriminatorP(torch.nn.Module):
@@ -749,7 +791,7 @@ class ReferenceEncoder(nn.Module):
         )
         self.proj = nn.Linear(128, gin_channels)
 
-    def forward(self, inputs, mask=None):
+    def forward(self, inputs, mask: torch.Tensor = torch.tensor(0)):
         N = inputs.size(0)
         out = inputs.view(N, 1, -1, self.spec_channels)  # [N, 1, Ty, n_freqs]
         for conv in self.convs:
@@ -895,10 +937,7 @@ class SynthesizerTrn(nn.Module):
             hidden_channels, 256, 3, 0.5, gin_channels=gin_channels
         )
 
-        if n_speakers >= 1:
-            self.emb_g = nn.Embedding(n_speakers, gin_channels)
-        else:
-            self.ref_enc = ReferenceEncoder(spec_channels, gin_channels)
+        self.emb_g = nn.Embedding(n_speakers, gin_channels)
 
     def forward(
         self,
@@ -914,10 +953,7 @@ class SynthesizerTrn(nn.Module):
         en_bert,
         style_vec,
     ):
-        if self.n_speakers > 0:
-            g = self.emb_g(sid).unsqueeze(-1)  # [b, h, 1]
-        else:
-            g = self.ref_enc(y.transpose(1, 2)).unsqueeze(-1)
+        g = self.emb_g(sid).unsqueeze(-1)  # [b, h, 1]
         x, m_p, logs_p, x_mask = self.enc_p(
             x, x_lengths, tone, language, bert, ja_bert, en_bert, style_vec, sid, g=g
         )
@@ -950,7 +986,7 @@ class SynthesizerTrn(nn.Module):
 
             attn_mask = torch.unsqueeze(x_mask, 2) * torch.unsqueeze(y_mask, -1)
             attn = (
-                monotonic_align.maximum_path(neg_cent, attn_mask.squeeze(1))
+                monotonic_align.maximum_path_new(neg_cent, attn_mask.squeeze(1))
                 .unsqueeze(1)
                 .detach()
             )
@@ -989,6 +1025,7 @@ class SynthesizerTrn(nn.Module):
             (x, logw, logw_),
         )
 
+    @torch.jit.export
     def infer(
         self,
         x,
@@ -1000,19 +1037,16 @@ class SynthesizerTrn(nn.Module):
         ja_bert,
         en_bert,
         style_vec,
-        noise_scale=0.667,
-        length_scale=1,
-        noise_scale_w=0.8,
-        max_len=None,
-        sdp_ratio=0,
-        y=None,
+        noise_scale: float = 0.667,
+        length_scale: float = 1.0,
+        noise_scale_w: float = 0.8,
+        sdp_ratio: float = 0.0,
+        y: torch.Tensor = torch.tensor(0),
     ):
         # x, m_p, logs_p, x_mask = self.enc_p(x, x_lengths, tone, language, bert)
         # g = self.gst(y)
-        if self.n_speakers > 0:
-            g = self.emb_g(sid).unsqueeze(-1)  # [b, h, 1]
-        else:
-            g = self.ref_enc(y.transpose(1, 2)).unsqueeze(-1)
+        g = self.emb_g(sid).unsqueeze(-1)  # [b, h, 1]
+
         x, m_p, logs_p, x_mask = self.enc_p(
             x, x_lengths, tone, language, bert, ja_bert, en_bert, style_vec, sid, g=g
         )
@@ -1022,9 +1056,9 @@ class SynthesizerTrn(nn.Module):
         w = torch.exp(logw) * x_mask * length_scale
         w_ceil = torch.ceil(w)
         y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()
-        y_mask = torch.unsqueeze(commons.sequence_mask(y_lengths, None), 1).to(
-            x_mask.dtype
-        )
+        y_mask = torch.unsqueeze(
+            commons.sequence_mask(y_lengths, y_lengths.max()), 1
+        ).to(x_mask.dtype)
         attn_mask = torch.unsqueeze(x_mask, 2) * torch.unsqueeze(y_mask, -1)
         attn = commons.generate_path(w_ceil, attn_mask)
 
@@ -1037,5 +1071,5 @@ class SynthesizerTrn(nn.Module):
 
         z_p = m_p + torch.randn_like(m_p) * torch.exp(logs_p) * noise_scale
         z = self.flow(z_p, y_mask, g=g, reverse=True)
-        o = self.dec((z * y_mask)[:, :, :max_len], g=g)
+        o = self.dec((z * y_mask)[:, :, :], g=g)
         return o, attn, y_mask, (z, z_p, m_p, logs_p)
