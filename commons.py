@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 import math
+from typing import Optional
 import torch
 from torch.nn import functional as F
 
@@ -57,10 +58,12 @@ def slice_segments(x, ids_str, segment_size: int = 4):
     return torch.gather(x, 2, gather_indices)
 
 
-def rand_slice_segments(x, x_lengths=None, segment_size: int = 4):
+def rand_slice_segments(
+    x: torch.Tensor, x_lengths: Optional[torch.Tensor] = None, segment_size: int = 4
+):
     b, d, t = x.size()
     if x_lengths is None:
-        x_lengths = t
+        x_lengths = torch.tensor(t)
     ids_str_max = torch.clamp(x_lengths - segment_size + 1, min=0)
     ids_str = (torch.rand([b], device=x.device) * ids_str_max).to(dtype=torch.long)
     ret = slice_segments(x, ids_str, segment_size)
@@ -115,14 +118,14 @@ def shift_1d(x):
     return x
 
 
-def sequence_mask(length, max_length: int):
+def sequence_mask(length: torch.Tensor, max_length: int):
     """
     for torch script, max_length = length.max(), not None"""
     x = torch.arange(max_length, dtype=length.dtype, device=length.device)
     return x.unsqueeze(0) < length.unsqueeze(1)
 
 
-def generate_path(duration, mask):
+def generate_path(duration: torch.Tensor, mask: torch.Tensor):
     """
     duration: [b, 1, t_x]
     mask: [b, 1, t_y, t_x]

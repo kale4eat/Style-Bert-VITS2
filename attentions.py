@@ -1,3 +1,4 @@
+from typing import Optional
 import math
 import torch
 from torch import nn
@@ -98,7 +99,12 @@ class Encoder(nn.Module):
             )
             self.norm_layers_2.append(LayerNorm(hidden_channels))
 
-    def forward(self, x, x_mask, g: torch.Tensor = torch.tensor(0)):
+    def forward(
+        self,
+        x: torch.Tensor,
+        x_mask: torch.Tensor,
+        g: Optional[torch.Tensor] = None,
+    ):
         attn_mask = x_mask.unsqueeze(2) * x_mask.unsqueeze(-1)
         x = x * x_mask
         # for torchscript
@@ -110,7 +116,7 @@ class Encoder(nn.Module):
                 self.norm_layers_2,
             )
         ):
-            if i == self.cond_layer_idx and torch.any(g):
+            if i == self.cond_layer_idx and g is not None:
                 g = self.spk_emb_linear(g.transpose(1, 2))
                 g = g.transpose(1, 2)
                 x = x + g
@@ -218,9 +224,9 @@ class MultiHeadAttention(nn.Module):
         out_channels: int,
         n_heads: int,
         p_dropout: float = 0.0,
-        window_size=None,
+        window_size: Optional[int] = None,
         heads_share: bool = True,
-        block_length=None,
+        block_length: Optional[int] = None,
         proximal_bias: bool = False,
         proximal_init: bool = False,
     ):
@@ -236,7 +242,9 @@ class MultiHeadAttention(nn.Module):
         self.block_length = block_length
         self.proximal_bias = proximal_bias
         self.proximal_init = proximal_init
-        self.attn = torch.tensor(0)  # for torchscript
+        # this cannot solve error
+        # self.attn: Optional[torch.Tensor] = None
+        self.attn: torch.Tensor = torch.tensor(0)  # for torchscript
 
         self.k_channels = channels // n_heads
         self.conv_q = nn.Conv1d(channels, channels, 1)
@@ -265,7 +273,12 @@ class MultiHeadAttention(nn.Module):
                 self.conv_k.weight.copy_(self.conv_q.weight)
                 self.conv_k.bias.copy_(self.conv_q.bias)
 
-    def forward(self, x, c, attn_mask=None):
+    def forward(
+        self,
+        x: torch.Tensor,
+        c: torch.Tensor,
+        attn_mask: Optional[torch.Tensor] = None,
+    ):
         q = self.conv_q(x)
         k = self.conv_k(c)
         v = self.conv_v(c)
@@ -275,7 +288,13 @@ class MultiHeadAttention(nn.Module):
         x = self.conv_o(x)
         return x
 
-    def attention(self, query, key, value, mask=None):
+    def attention(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
+    ):
         # reshape [b, d, t] -> [b, n_h, t, d_k]
         # for torchscript
         b, d, t_s = key.size()
